@@ -1,0 +1,20 @@
+;; shadow-cljs configuration
+{:source-paths
+ ["src/dev"
+  "src/main"
+  "src/test"]
+
+ :dependencies
+ []
+
+ :builds
+ {:lib-cjs
+  {:target :node-library
+   :output-to "dist/cjs/index.cjs"
+   :exports-var main/init}
+
+  :lib-esm
+  {:target :esm
+   :output-dir "dist/esm"
+   :modules {:index {:entries [main]
+                     :exports {init main/init}}}}}}

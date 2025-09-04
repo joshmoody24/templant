@@ -1,0 +1,21 @@
+{
+  "name": "transplate",
+  "version": "0.0.1",
+  "type": "module",
+  "files": [
+    "dist/"
+  ],
+  "main": "dist/esm/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs"
+    }
+  },
+  "devDependencies": {
+    "shadow-cljs": "3.2.0"
+  },
+  "scripts": {
+    "build": "shadow-cljs release lib-cjs && shadow-cljs release lib-esm"
+  }
+}
