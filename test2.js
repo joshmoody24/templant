@@ -1,2 +1,2 @@
-import * as lib from "./dist/esm/index.js";
-lib.translate({ from: "nunjucks", to: "mustache" });
+import { translate } from "./dist/translate.js";
+console.log(translate({ from: "nunjucks", to: "mustache", input: "Hello {{name}}!" }));

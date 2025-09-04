@@ -16,17 +16,11 @@
   "files": [
     "dist/"
   ],
-  "main": "dist/esm/index.js",
+  "main": "dist/translate.js",
   "exports": {
-    ".": {
-      "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.cjs"
-    }
-  },
-  "devDependencies": {
-    "shadow-cljs": "3.2.0"
+    ".": "./dist/translate.js"
   },
   "scripts": {
-    "build": "shadow-cljs release lib-cjs && shadow-cljs release lib-esm"
+    "build": "cp src/translate.js dist/translate.js"
   }
 }
