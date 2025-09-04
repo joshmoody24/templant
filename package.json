@@ -1,6 +1,17 @@
 {
-  "name": "transplate",
+  "name": "@joshmoody24/transplate",
   "version": "0.0.1",
+  "description": "Translate between different template languages",
+  "keywords": [
+    "template",
+    "nunjucks",
+    "mustache",
+    "handlebars",
+    "ejs",
+    "liquid",
+    "pug",
+    "translation"
+  ],
   "type": "module",
   "files": [
     "dist/"
