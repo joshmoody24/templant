@@ -2,6 +2,9 @@
  * Translate templates between different template languages
  */
 
+/**
+ * @typedef {'nunjucks' | 'ejs' | 'handlebars' | 'liquid' | 'mustache' | 'pug'} TemplateLanguage
+ */
 const SUPPORTED_LANGUAGES = new Set([
   "nunjucks",
   "ejs",
@@ -12,12 +15,15 @@ const SUPPORTED_LANGUAGES = new Set([
 ]);
 
 /**
- * @typedef {'nunjucks' | 'ejs' | 'handlebars' | 'liquid' | 'mustache' | 'pug'} TemplateLanguage
+ * @typedef {Object} TranslateArgs
+ * @property {TemplateLanguage} from - Source template language
+ * @property {TemplateLanguage} to - Target template language
+ * @property {string} input - Template string to translate
  */
 
 /**
  * Validates translate arguments
- * @param {Object} args - The arguments to validate
+ * @param {TranslateArgs} args - Arguments to validate
  * @throws {Error} If arguments are invalid
  */
 function validateArgs(args) {
@@ -58,16 +64,16 @@ function validateArgs(args) {
 
 /**
  * Translates a template from one language to another
- * @param {Object} options - Translation options
- * @param {TemplateLanguage} options.from - Source template language
- * @param {TemplateLanguage} options.to - Target template language
- * @param {string} options.input - Template string to translate
- * @returns {string} Translated template string
+ * @param {object} args - Translation arguments
+ * @param {TemplateLanguage} args.from - Source template language
+ * @param {TemplateLanguage} args.to - Target template language
+ * @param {string} args.input - Template string to translate
  */
-export function translate(options) {
-  validateArgs(options);
+export function translate(args) {
+  validateArgs(args);
+  const { from, to, input } = args;
 
   // TODO: implement actual translation logic
-  return `<!-- Translated from ${options.from} to ${options.to} -->\n${options.input}`;
+  return `<!-- Translated from ${from} to ${to} -->\n${input}`;
 }
 
