@@ -1,5 +1,5 @@
 {
-  description = "Dev environment for JavaScript npm library";
+  description = "Dev environment for templant - JavaScript template translation library";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
