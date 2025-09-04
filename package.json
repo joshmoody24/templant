@@ -1,7 +1,15 @@
 {
-  "name": "@joshmoody24/templant",
+  "name": "templant",
   "version": "0.0.1",
   "description": "Translate between different template languages",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joshmoody24/templant.git"
+  },
+  "bugs": {
+    "url": "https://github.com/joshmoody24/templant/issues"
+  },
+  "homepage": "https://github.com/joshmoody24/templant#readme",
   "keywords": [
     "template",
     "nunjucks",
