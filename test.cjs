@@ -1,3 +1,3 @@
 // test-cjs.js
 const lib = require(".");
-lib.init(); // should print "hello world"
+lib.translate(); // should print "hello world"

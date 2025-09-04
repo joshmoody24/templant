@@ -1,7 +1,6 @@
 ;; shadow-cljs configuration
 {:source-paths
- ["src/dev"
-  "src/main"
+ ["src/main"
   "src/test"]
 
  :dependencies
@@ -11,10 +10,10 @@
  {:lib-cjs
   {:target :node-library
    :output-to "dist/cjs/index.cjs"
-   :exports-var main/init}
+   :exports {:translate transplate.interop/translate}}
 
   :lib-esm
   {:target :esm
    :output-dir "dist/esm"
-   :modules {:index {:entries [main]
-                     :exports {init main/init}}}}}}
+   :modules {:index {:entries [transplate.interop]
+                     :exports {translate transplate.interop/translate}}}}}}
