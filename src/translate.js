@@ -2,6 +2,8 @@
  * Translate templates between different template languages
  */
 
+import { parsers, renderers } from "./langs/index.js";
+
 /**
  * @typedef {'nunjucks' | 'ejs' | 'handlebars' | 'liquid' | 'mustache' | 'pug'} TemplateLanguage
  */
@@ -72,8 +74,14 @@ function validateArgs(args) {
 export function translate(args) {
   validateArgs(args);
   const { from, to, input } = args;
-
-  // TODO: implement actual translation logic
-  return `<!-- Translated from ${from} to ${to} -->\n${input}`;
+  const parser = parsers[from];
+  if (!parser) {
+    throw new Error(`No parser found for language: ${from}`);
+  }
+  const ir = parser(input);
+  const renderer = renderers[to];
+  if (!renderer) {
+    throw new Error(`No renderer found for language: ${to}`);
+  }
+  return renderer(ir);
 }
-

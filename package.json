@@ -30,6 +30,14 @@
     ".": "./dist/translate.js"
   },
   "scripts": {
-    "build": "cp src/translate.js dist/translate.js && cp src/translate.d.ts dist/translate.d.ts"
+    "build": "cp src/translate.js dist/translate.js && cp src/translate.d.ts dist/translate.d.ts",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "liquidjs": "^10.21.1",
+    "nunjucks": "^3.2.4"
+  },
+  "devDependencies": {
+    "eslint": "^9.34.0"
   }
 }
