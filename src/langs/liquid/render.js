@@ -18,7 +18,12 @@ function renderNode(node) {
     case "output": {
       const filters =
         node.filters.length > 0 ? " | " + node.filters.join(" | ") : "";
-      return `{{ ${node.postfix.join(".")}${filters} }}`;
+      const accessPath = node.postfix
+        .map((part, i) =>
+          i === 0 ? part : typeof part === "number" ? `[${part}]` : `.${part}`,
+        )
+        .join("");
+      return `{{ ${accessPath}${filters} }}`;
     }
     case "tag":
       return `{% ${node.name} %}`; // TODO: flesh this out
