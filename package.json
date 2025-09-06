@@ -1,6 +1,6 @@
 {
   "name": "templant",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Translate between different template languages",
   "repository": {
     "type": "git",
@@ -24,10 +24,10 @@
   "files": [
     "dist/"
   ],
-  "main": "dist/translate.js",
-  "types": "dist/translate.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./dist/translate.js"
+    ".": "./dist/index.js"
   },
   "scripts": {
     "build": "rm -rf dist && cp -r src dist",
