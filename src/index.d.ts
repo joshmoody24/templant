@@ -9,4 +9,4 @@ export type {
   Parser,
   Renderer,
   BuiltInLanguage,
-} from "./global.js";
+} from "./types";

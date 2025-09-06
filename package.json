@@ -1,6 +1,6 @@
 {
   "name": "templant",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Translate between different template languages",
   "repository": {
     "type": "git",
