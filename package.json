@@ -1,6 +1,6 @@
 {
   "name": "templant",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Translate between different template languages",
   "repository": {
     "type": "git",
@@ -30,7 +30,8 @@
     ".": "./dist/translate.js"
   },
   "scripts": {
-    "build": "cp src/translate.js dist/translate.js && cp src/translate.d.ts dist/translate.d.ts",
+    "build": "mkdir -p dist && cp src/translate.js dist/translate.js && cp src/translate.d.ts dist/translate.d.ts",
+    "publish": "npm run build && npm publish --access public",
     "test": "node --test",
     "lint": "eslint .",
     "format": "prettier --write ."
