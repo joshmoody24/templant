@@ -6,7 +6,7 @@ export type { TranslateArgs } from "./translate.js";
 export type {
   IrNode,
   IrTextNode,
-  IrExpressionNode,
+  IrOutputNode,
   IrTagNode,
   Parser,
   Renderer,

@@ -3,7 +3,7 @@ export interface IrTextNode {
   content: string;
 }
 
-export interface IrExpressionNode {
+export interface IrOutputNode {
   type: "output";
   filters: string[];
   postfix: string[];
@@ -16,7 +16,7 @@ export interface IrTagNode {
   children: IrNode[];
 }
 
-export type IrNode = IrTextNode | IrExpressionNode | IrTagNode;
+export type IrNode = IrTextNode | IrOutputNode | IrTagNode;
 
 export type Parser = (content: string) => IrNode[];
 export type Renderer = (ir: IrNode[]) => string;
