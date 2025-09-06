@@ -4,11 +4,9 @@
 
 import { parsers, renderers } from "./langs/index.js";
 
-/** @typedef {import("./translate").TranslateArgs} TranslateArgs */
-
 /**
  * Validates translate arguments
- * @param {TranslateArgs} args - Arguments to validate
+ * @param {import("./translate.js").TranslateArgs} args - Arguments to validate
  * @throws {Error} If arguments are invalid
  */
 function validateArgs(args) {
@@ -37,12 +35,12 @@ function validateArgs(args) {
 }
 
 /**
- * @template {Record<string, import("./langs").Parser>} [CustomParsers = {}]
- * @template {Record<string, import("./langs").Renderer>} [CustomRenderers = {}]
+ * @template {Record<string, Parser>} [CustomParsers = {}]
+ * @template {Record<string, Renderer>} [CustomRenderers = {}]
  *
  * Translate templates between different template languages.
  *
- * @param {import("./translate").TranslateArgs<CustomParsers, CustomRenderers>} args
+ * @param {import("./translate.js").TranslateArgs<CustomParsers, CustomRenderers>} args
  * @returns {string}
  */
 export function translate(args) {

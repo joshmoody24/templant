@@ -1,6 +1,6 @@
 /**
  * Renders IR nodes back to Liquid template syntax
- * @type {import("..").Renderer}
+ * @type {Renderer}
  */
 export function render(ir) {
   return ir.map(renderNode).join("");

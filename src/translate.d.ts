@@ -1,12 +1,3 @@
-import { Parser, Renderer } from "./langs";
-
-export type BuiltInLanguage = "liquid";
-// | "nunjucks"
-// | "ejs"
-// | "handlebars"
-// | "mustache"
-// | "pug";
-
 export interface TranslateArgs<
   CustomParsers extends Record<string, Parser> = {},
   CustomRenderers extends Record<string, Renderer> = {},
