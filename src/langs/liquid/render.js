@@ -26,4 +26,3 @@ function renderNode(node) {
       throw new Error(`Unsupported IR node type: ${node.type}`);
   }
 }
-

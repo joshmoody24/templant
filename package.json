@@ -1,6 +1,6 @@
 {
   "name": "templant",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Translate between different template languages",
   "repository": {
     "type": "git",
@@ -31,13 +31,16 @@
   },
   "scripts": {
     "build": "cp src/translate.js dist/translate.js && cp src/translate.d.ts dist/translate.d.ts",
-    "test": "node --test"
+    "test": "node --test",
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "liquidjs": "^10.21.1",
     "nunjucks": "^3.2.4"
   },
   "devDependencies": {
-    "eslint": "^9.34.0"
+    "eslint": "^9.34.0",
+    "prettier": "^3.6.2"
   }
 }

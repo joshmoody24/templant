@@ -4,6 +4,6 @@
  */
 export const testTemplates = {
   simple: {
-    liquid: "Hello {{ name }}!"
-  }
+    liquid: "Hello {{ name }}!",
+  },
 };

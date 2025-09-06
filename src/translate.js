@@ -4,24 +4,7 @@
 
 import { parsers, renderers } from "./langs/index.js";
 
-/**
- * @typedef {'nunjucks' | 'ejs' | 'handlebars' | 'liquid' | 'mustache' | 'pug'} TemplateLanguage
- */
-const SUPPORTED_LANGUAGES = new Set([
-  "nunjucks",
-  "ejs",
-  "handlebars",
-  "liquid",
-  "mustache",
-  "pug",
-]);
-
-/**
- * @typedef {Object} TranslateArgs
- * @property {TemplateLanguage} from - Source template language
- * @property {TemplateLanguage} to - Target template language
- * @property {string} input - Template string to translate
- */
+/** @typedef {import("./translate").TranslateArgs} TranslateArgs */
 
 /**
  * Validates translate arguments
@@ -42,17 +25,6 @@ function validateArgs(args) {
       'Invalid argument "input": expected string (the template content)',
     );
   }
-
-  if (args?.from && !SUPPORTED_LANGUAGES.has(args.from)) {
-    errors.push(
-      `Invalid argument "from": unsupported language "${args.from}". Supported: ${Array.from(SUPPORTED_LANGUAGES).join(", ")}`,
-    );
-  }
-  if (args?.to && !SUPPORTED_LANGUAGES.has(args.to)) {
-    errors.push(
-      `Invalid argument "to": unsupported language "${args.to}". Supported: ${Array.from(SUPPORTED_LANGUAGES).join(", ")}`,
-    );
-  }
   if (args?.input && typeof args.input !== "string") {
     errors.push(
       'Invalid argument "input": expected string (the template content)',
@@ -65,21 +37,25 @@ function validateArgs(args) {
 }
 
 /**
- * Translates a template from one language to another
- * @param {object} args - Translation arguments
- * @param {TemplateLanguage} args.from - Source template language
- * @param {TemplateLanguage} args.to - Target template language
- * @param {string} args.input - Template string to translate
+ * @template {Record<string, import("./langs").Parser>} [CustomParsers = {}]
+ * @template {Record<string, import("./langs").Renderer>} [CustomRenderers = {}]
+ *
+ * Translate templates between different template languages.
+ *
+ * @param {import("./translate").TranslateArgs<CustomParsers, CustomRenderers>} args
+ * @returns {string}
  */
 export function translate(args) {
   validateArgs(args);
   const { from, to, input } = args;
-  const parser = parsers[from];
+  // @ts-ignore
+  const parser = { ...parsers, ...args.customParsers }[from];
   if (!parser) {
     throw new Error(`No parser found for language: ${from}`);
   }
   const ir = parser(input);
-  const renderer = renderers[to];
+  // @ts-ignore
+  const renderer = { ...renderers, ...args.customRenderers }[to];
   if (!renderer) {
     throw new Error(`No renderer found for language: ${to}`);
   }

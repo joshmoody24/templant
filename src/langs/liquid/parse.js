@@ -1,4 +1,4 @@
-import { Liquid, TagToken, TokenKind } from "liquidjs";
+import { Liquid, TokenKind } from "liquidjs";
 
 /**
  * Parses a Liquid template string and returns the first token of the parsed template.

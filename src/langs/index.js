@@ -14,14 +14,14 @@ import { render as renderLiquid } from "./liquid/render.js";
  */
 
 /**
- * @type {Record<import("../translate").TemplateLanguage, Parser>}
+ * @type {Record<import("../translate").BuiltInLanguage, Parser>}
  */
 export const parsers = {
   liquid: parseLiquid,
 };
 
 /**
- * @type {Record<import("../translate").TemplateLanguage, Renderer>}
+ * @type {Record<import("../translate").BuiltInLanguage, Renderer>}
  */
 export const renderers = {
   liquid: renderLiquid,
