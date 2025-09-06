@@ -30,8 +30,8 @@
     ".": "./dist/translate.js"
   },
   "scripts": {
-    "build": "mkdir -p dist && cp src/translate.js dist/translate.js && cp src/translate.d.ts dist/translate.d.ts",
-    "publish": "npm run build && npm publish --access public",
+    "build": "rm -rf dist && cp -r src dist",
+    "release": "npm run build && npm publish --access public",
     "test": "node --test",
     "lint": "eslint .",
     "format": "prettier --write ."
