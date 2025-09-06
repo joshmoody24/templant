@@ -1,3 +1,5 @@
+/// <reference path="./global.d.ts" />
+
 export { translate } from "./translate.js";
 export type { TranslateArgs } from "./translate.js";
 

@@ -12,5 +12,5 @@ translate({
   from: "legacyRedo",
   to: "liquid",
   input: "",
-  customParsers: { legacyRedo: "" },
+  customParsers: { legacyRedo: () => [] },
 });
