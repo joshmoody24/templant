@@ -1,3 +1,6 @@
+// Importing explicitly so package consumers don't get red squiggles
+import type { Parser, Renderer, BuiltInLanguage } from "./types";
+
 export interface TranslateArgs<
   CustomParsers extends Record<string, Parser> = {},
   CustomRenderers extends Record<string, Renderer> = {},

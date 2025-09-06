@@ -1,6 +1,6 @@
 {
   "name": "templant",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "description": "Translate between different template languages",
   "repository": {
     "type": "git",
@@ -24,13 +24,18 @@
   "files": [
     "dist/"
   ],
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
   },
   "scripts": {
-    "build": "rm -rf dist && cp -r src dist",
+    "build": "rm -rf dist && esbuild src/index.js --bundle --format=cjs --outfile=dist/index.cjs && esbuild src/index.js --bundle --format=esm --outfile=dist/index.js && cp -r src/*.d.ts dist/ 2>/dev/null || true",
     "release": "npm run build && npm publish --access public",
     "test": "node --test",
     "lint": "eslint .",
@@ -41,6 +46,7 @@
     "nunjucks": "^3.2.4"
   },
   "devDependencies": {
+    "esbuild": "^0.25.9",
     "eslint": "^9.34.0",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2"
