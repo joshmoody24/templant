@@ -10,6 +10,8 @@ console.log(new Liquid().parse(template)[3].value);
 const ir = parse(template);
 console.log(render(ir));
 
+translate();
+
 translate({
   from: "legacyRedo",
   to: "liquid",
