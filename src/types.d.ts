@@ -9,7 +9,11 @@ export interface IrOutputNode {
     name: string;
     args?: string[];
   }[];
-  postfix: string[];
+  // postfix array represents property access chain and literals
+  // null represents the literal null value (e.g., {{ null }})
+  // strings represent variable names, property names, or other literals
+  // numbers represent array indices (e.g., items[0])
+  postfix: (string | number | null)[];
   trimLeft?: boolean;
   trimRight?: boolean;
 }
@@ -48,15 +52,25 @@ export interface IrCommentNode {
   content: string;
 }
 
+export interface IrAssignmentNode {
+  type: "assignment";
+  target: string;
+  expression: string;
+  children?: IrNode[]; // For block assignments like capture
+  trimLeft?: boolean;
+  trimRight?: boolean;
+}
+
 export type IrNode =
   | IrTextNode
   | IrOutputNode
   | IrTagNode
   | IrConditionalNode
   | IrLoopNode
-  | IrCommentNode;
+  | IrCommentNode
+  | IrAssignmentNode;
 
 export type Parser = (content: string) => IrNode[];
 export type Renderer = (ir: IrNode[]) => string;
 
-export type BuiltInLanguage = "liquid";
+export type BuiltInLanguage = "liquid" | "nunjucks";

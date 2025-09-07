@@ -9,6 +9,7 @@ export type {
   IrConditionalNode,
   IrLoopNode,
   IrCommentNode,
+  IrAssignmentNode,
   Parser,
   Renderer,
   BuiltInLanguage,

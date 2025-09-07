@@ -1,4 +1,5 @@
 import { Liquid, TokenKind } from "liquidjs";
+import { IR_LOOP_VAR, LOOP_PROPERTY_MAP } from "../../ir-constants.js";
 
 /**
  * Parses a Liquid template string and returns the first token of the parsed template.
@@ -7,15 +8,17 @@ import { Liquid, TokenKind } from "liquidjs";
 export function parse(template) {
   const liquid = new Liquid();
   const templates = liquid.parse(template);
-  return templates.flatMap(convertTemplate);
+  return templates.flatMap((t) => convertTemplate(t, { inLoop: false }));
 }
 
 /**
  * Converts a Liquid token to an intermediate representation (IR) node.
  * @param {import("liquidjs").Template} template - The Liquid token to convert.
+ * @param {Object} context - Parsing context
+ * @param {boolean} context.inLoop - Whether we're inside a loop
  * @returns {IrNode[]} The corresponding IR nodes.
  */
-function convertTemplate(template) {
+function convertTemplate(template, context = { inLoop: false }) {
   switch (template.token.kind) {
     case TokenKind.HTML:
       return [
@@ -47,9 +50,21 @@ function convertTemplate(template) {
           postfix: template.value.initial.postfix.flatMap((p) => {
             if (p.props) {
               // Property access like user.name
-              return p.props.map((prop) => prop.content);
+              const props = p.props.map((prop) => prop.content);
+              // Normalize liquid forloop to standard loop variable in IR when in loop context
+              if (context.inLoop && props[0] === "forloop") {
+                props[0] = IR_LOOP_VAR;
+                // Also normalize liquid-specific property names
+                if (props[1] && LOOP_PROPERTY_MAP[props[1]]) {
+                  props[1] = LOOP_PROPERTY_MAP[props[1]];
+                }
+              }
+              return props;
             } else if (p.literal !== undefined) {
               // Special literals like null, blank, empty
+              // Convert special literals to standardized values
+              if (p.literal === "null") return [null];
+              if (p.literal === "blank") return [""];
               return [p.literal];
             } else if (p.content !== undefined) {
               // Other literals like 'string', 42
@@ -87,7 +102,7 @@ function convertTemplate(template) {
             branches.push({
               condition: whenValues,
               children: branch.templates
-                ? branch.templates.flatMap(convertTemplate)
+                ? branch.templates.flatMap((t) => convertTemplate(t, context))
                 : [],
             });
           });
@@ -98,7 +113,7 @@ function convertTemplate(template) {
                 ? template.token.args
                 : extractCondition(branch.value),
             children: branch.templates
-              ? branch.templates.flatMap(convertTemplate)
+              ? branch.templates.flatMap((t) => convertTemplate(t, context))
               : [],
           }));
         }
@@ -106,7 +121,9 @@ function convertTemplate(template) {
         if (template.elseTemplates && template.elseTemplates.length > 0) {
           branches.push({
             condition: null,
-            children: template.elseTemplates.flatMap(convertTemplate),
+            children: template.elseTemplates.flatMap((t) =>
+              convertTemplate(t, context),
+            ),
           });
         }
 
@@ -130,10 +147,12 @@ function convertTemplate(template) {
         if (template.name === "capture") {
           return [
             {
-              type: "tag",
-              name: "capture",
-              args: template.token.args,
-              children: template.templates.flatMap(convertTemplate),
+              type: "assignment",
+              target: template.token.args,
+              expression: "", // Block assignment has no expression
+              children: template.templates.flatMap((t) =>
+                convertTemplate(t, context),
+              ),
               trimLeft: template.token.trimLeft,
               trimRight: template.token.trimRight,
             },
@@ -144,10 +163,14 @@ function convertTemplate(template) {
           {
             type: "loop",
             args: template.token.args,
-            children: template.templates.flatMap(convertTemplate),
+            children: template.templates.flatMap((t) =>
+              convertTemplate(t, { ...context, inLoop: true }),
+            ),
             elseChildren:
               template.elseTemplates && template.elseTemplates.length > 0
-                ? template.elseTemplates.flatMap(convertTemplate)
+                ? template.elseTemplates.flatMap((t) =>
+                    convertTemplate(t, { ...context, inLoop: true }),
+                  )
                 : undefined,
             trimLeft: template.token.trimLeft,
             trimRight: template.token.trimRight,
@@ -186,6 +209,24 @@ function convertTemplate(template) {
             name: "raw",
             args: template.token.args,
             children: content ? [{ type: "text", content: content }] : [],
+            trimLeft: template.token.trimLeft,
+            trimRight: template.token.trimRight,
+          },
+        ];
+      }
+
+      if (template.name === "assign") {
+        const args = template.token.args || "";
+        const [target, ...expressionParts] = args
+          .split("=")
+          .map((s) => s.trim());
+        const expression = expressionParts.join("=").trim();
+
+        return [
+          {
+            type: "assignment",
+            target: target || "",
+            expression: expression || "",
             trimLeft: template.token.trimLeft,
             trimRight: template.token.trimRight,
           },

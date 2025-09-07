@@ -1,7 +1,7 @@
 import { IR_LOOP_VAR, LOOP_PROPERTY_MAP } from "../../ir-constants.js";
 
 /**
- * Renders IR nodes back to Liquid template syntax
+ * Renders IR nodes back to Nunjucks template syntax
  * @type {Renderer}
  */
 export function render(ir) {
@@ -9,9 +9,9 @@ export function render(ir) {
 }
 
 /**
- * Renders a single IR node to Liquid syntax
+ * Renders a single IR node to Nunjucks syntax
  * @param {IrNode} node - The IR node to render
- * @returns {string} The rendered Liquid syntax
+ * @returns {string} The rendered Nunjucks syntax
  */
 function renderNode(node) {
   switch (node.type) {
@@ -24,7 +24,7 @@ function renderNode(node) {
             node.filters
               .map((f) => {
                 if (f.args && f.args.length > 0) {
-                  return `${f.name}: ${f.args.join(", ")}`;
+                  return `${f.name}(${f.args.join(", ")})`;
                 }
                 return f.name;
               })
@@ -34,14 +34,14 @@ function renderNode(node) {
         .map((part, i) => {
           if (i === 0) {
             if (part === null) return "null";
-            // Convert special IR loop variable back to liquid forloop
-            if (part === IR_LOOP_VAR) return "forloop";
+            // Convert special IR loop variable back to nunjucks loop
+            if (part === IR_LOOP_VAR) return "loop";
             return part;
           }
           if (typeof part === "number") return `[${part}]`;
-          // Convert special IR property names back to liquid-specific names
+          // Convert special IR property names back to nunjucks-specific names
           if (node.postfix[0] === IR_LOOP_VAR && part === "__REVINDEX__")
-            return ".rindex";
+            return ".revindex";
           return `.${part}`;
         })
         .join("");
@@ -55,32 +55,34 @@ function renderNode(node) {
       const leftBrace = node.trimLeft ? "{%-" : "{%";
       const rightBrace = node.trimRight ? "-%}" : "%}";
 
-      if (node.variant === "case") {
-        // For case statements: first branch has the case expression
-        result += `${leftBrace} case ${node.branches[0].condition} ${rightBrace}`;
+      if (node.variant === "unless") {
+        // Nunjucks doesn't have unless, convert to if not
+        result += `${leftBrace} if not ${node.branches[0].condition} ${rightBrace}`;
+        result += node.branches[0].children.map(renderNode).join("");
+        result += `${leftBrace} endif ${rightBrace}`;
+      } else if (node.variant === "case") {
+        // Nunjucks doesn't have case/when, convert to if/elif chain
+        const caseExpr = node.branches[0].condition;
 
-        node.branches.slice(1).forEach((branch) => {
+        node.branches.slice(1).forEach((branch, index) => {
           if (branch.condition) {
-            result += `${leftBrace} when ${branch.condition} ${rightBrace}`;
+            const keyword = index === 0 ? "if" : "elif";
+            result += `${leftBrace} ${keyword} ${caseExpr} == ${branch.condition} ${rightBrace}`;
+            result += branch.children.map(renderNode).join("");
           } else {
             result += `${leftBrace} else ${rightBrace}`;
+            result += branch.children.map(renderNode).join("");
           }
-          result += branch.children.map(renderNode).join("");
         });
 
-        result += `${leftBrace} endcase ${rightBrace}`;
-      } else if (node.variant === "unless") {
-        // For unless statements
-        result += `${leftBrace} unless ${node.branches[0].condition} ${rightBrace}`;
-        result += node.branches[0].children.map(renderNode).join("");
-        result += `${leftBrace} endunless ${rightBrace}`;
+        result += `${leftBrace} endif ${rightBrace}`;
       } else {
-        // For if statements
+        // Regular if statements
         node.branches.forEach((branch, index) => {
           if (index === 0) {
             result += `${leftBrace} if ${branch.condition} ${rightBrace}`;
           } else if (branch.condition) {
-            result += `${leftBrace} elsif ${branch.condition} ${rightBrace}`;
+            result += `${leftBrace} elif ${branch.condition} ${rightBrace}`;
           } else {
             result += `${leftBrace} else ${rightBrace}`;
           }
@@ -107,37 +109,41 @@ function renderNode(node) {
       return `${leftBrace} for ${node.args} ${rightBrace}${children}${elseClause}${leftBrace} endfor ${rightBrace}`;
     }
     case "comment": {
-      return `{% comment %}${node.content}{% endcomment %}`;
+      return `{# ${node.content} #}`;
     }
     case "assignment": {
       const leftBrace = node.trimLeft ? "{%-" : "{%";
       const rightBrace = node.trimRight ? "-%}" : "%}";
 
       if (node.children && node.children.length > 0) {
-        // Block assignment (capture)
+        // Block assignment: {% set x %}...{% endset %}
         const children = node.children.map(renderNode).join("");
-        return `${leftBrace} capture ${node.target} ${rightBrace}${children}${leftBrace} endcapture ${rightBrace}`;
+        return `${leftBrace} set ${node.target} ${rightBrace}${children}${leftBrace} endset ${rightBrace}`;
       } else {
-        // Inline assignment (assign)
-        return `${leftBrace} assign ${node.target} = ${node.expression} ${rightBrace}`;
+        // Inline assignment: {% set x = y %}
+        return `${leftBrace} set ${node.target} = ${node.expression} ${rightBrace}`;
       }
     }
     case "tag": {
       const leftBrace = node.trimLeft ? "{%-" : "{%";
       const rightBrace = node.trimRight ? "-%}" : "%}";
       const args = node.args ? ` ${node.args}` : "";
-      const opening = `${leftBrace} ${node.name}${args} ${rightBrace}`;
+
+      // Map some liquid-specific tags to nunjucks equivalents
+      let tagName = node.name;
+
+      const opening = `${leftBrace} ${tagName}${args} ${rightBrace}`;
 
       // Self-closing tags don't need end tags
       const selfClosingTags = ["include", "break", "continue"];
-      if (selfClosingTags.includes(node.name)) {
+      if (selfClosingTags.includes(tagName)) {
         return opening;
       }
 
       const children = node.children
         ? node.children.map(renderNode).join("")
         : "";
-      return opening + children + `${leftBrace} end${node.name} ${rightBrace}`;
+      return opening + children + `${leftBrace} end${tagName} ${rightBrace}`;
     }
     default:
       throw new Error(`Unsupported IR node type: ${node.type}`);
