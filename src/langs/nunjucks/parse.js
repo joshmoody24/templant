@@ -244,9 +244,20 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
     // This is a conditional node (if statement)
     const branches = [];
 
+    // Check if this is a "not" condition that should become "unless"
+    const isUnlessCondition = node.cond.typename === "Not";
+    let variant = "if";
+    let condition = extractExpression(node.cond);
+
+    if (isUnlessCondition) {
+      // Convert "not expr" to "unless expr"
+      variant = "unless";
+      condition = extractExpression(node.cond.target); // Extract the target without "not"
+    }
+
     // Main condition
     branches.push({
-      condition: extractExpression(node.cond),
+      condition,
       children: convertAstNodes(
         node.body.children || [],
         originalTemplate,
@@ -254,8 +265,15 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
       ),
     });
 
-    // Handle elif branches
+    // Handle elif branches (not valid for unless, so keep as if)
     if (node.elif_) {
+      // If we have elif branches, this can't be an unless statement
+      variant = "if";
+      if (isUnlessCondition) {
+        // Restore the "not" for the first condition since we have elif
+        branches[0].condition = extractExpression(node.cond);
+      }
+
       node.elif_.forEach((elifNode) => {
         branches.push({
           condition: extractExpression(elifNode.cond),
@@ -283,7 +301,7 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
     return [
       {
         type: "conditional",
-        variant: "if",
+        variant,
         branches,
         trimLeft: false,
         trimRight: false,
@@ -308,6 +326,23 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
  */
 function extractExpression(expr) {
   if (!expr) return "";
+
+  if (expr.typename === "Not") {
+    // Handle not expressions
+    const target = extractExpression(expr.target);
+    return `not ${target}`;
+  }
+
+  if (expr.typename === "LookupVal" && expr.target && expr.val) {
+    // Handle nested property access like user.banned
+    const target = extractExpression(expr.target);
+    const val = expr.val.value || expr.val;
+    return `${target}.${val}`;
+  }
+
+  if (expr.typename === "Symbol") {
+    return expr.value;
+  }
 
   if (expr.value !== undefined) {
     return expr.value;
