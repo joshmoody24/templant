@@ -219,6 +219,305 @@ function valueToExpression(value, context, template) {
 }
 
 /**
+ * Creates a text IR node from HTML content
+ */
+function handleHtmlToken(template) {
+  return [
+    {
+      type: "text",
+      content: template.str,
+    },
+  ];
+}
+
+/**
+ * Creates an output IR node from a Liquid output token
+ */
+function handleOutputToken(template, context) {
+  return [
+    {
+      type: "output",
+      expression: valueToExpression(template.value, context, template),
+      trimLeft: template.token.trimLeft,
+      trimRight: template.token.trimRight,
+    },
+  ];
+}
+
+/**
+ * Handles conditional templates (if/unless/case)
+ */
+function handleConditionalTemplate(template, context) {
+  const branches =
+    template.name === "case"
+      ? buildCaseBranches(template, context)
+      : buildIfBranches(template, context);
+
+  if (template.elseTemplates && template.elseTemplates.length > 0) {
+    branches.push({
+      condition: null,
+      children: template.elseTemplates.flatMap((t) =>
+        convertTemplate(t, context),
+      ),
+    });
+  }
+
+  return [
+    {
+      type: "conditional",
+      variant:
+        template.name === "case"
+          ? "case"
+          : template.name === "unless"
+            ? "unless"
+            : "if",
+      branches: branches,
+      trimLeft: template.token.trimLeft,
+      trimRight: template.token.trimRight,
+    },
+  ];
+}
+
+/**
+ * Builds case statement branches
+ */
+function buildCaseBranches(template, context) {
+  const caseExpression = valueToExpression(template.value, context, template);
+  const branches = [
+    {
+      condition: caseExpression,
+      children: [],
+    },
+  ];
+
+  template.branches.forEach((branch) => {
+    const whenValues = branch.values
+      ? branch.values.map((v) => `'${v.content}'`).join(", ")
+      : null;
+    const whenCondition = whenValues
+      ? { postfix: [whenValues], filters: [] }
+      : null;
+    branches.push({
+      condition: whenCondition,
+      children: branch.templates
+        ? branch.templates.flatMap((t) => convertTemplate(t, context))
+        : [],
+    });
+  });
+
+  return branches;
+}
+
+/**
+ * Builds if/unless statement branches
+ */
+function buildIfBranches(template, context) {
+  return template.branches.map((branch) => ({
+    condition: valueToExpression(branch.value, context, template),
+    children: branch.templates
+      ? branch.templates.flatMap((t) => convertTemplate(t, context))
+      : [],
+  }));
+}
+
+/**
+ * Handles capture template
+ */
+function handleCaptureTemplate(template, context) {
+  return [
+    {
+      type: "assignment",
+      target: template.token.args,
+      expression: null,
+      children: template.templates.flatMap((t) => convertTemplate(t, context)),
+      trimLeft: template.token.trimLeft,
+      trimRight: template.token.trimRight,
+    },
+  ];
+}
+
+/**
+ * Handles loop template (for)
+ */
+function handleLoopTemplate(template, context) {
+  const loopArgs = template.token.args || "";
+  const [variable, ...collectionParts] = loopArgs
+    .split(" in ")
+    .map((s) => s.trim());
+  const collectionString = collectionParts.join(" in ");
+
+  const collectionExpression = parseCollectionExpression(
+    collectionString,
+    context,
+  );
+
+  return [
+    {
+      type: "loop",
+      args: {
+        variable: variable,
+        collection: collectionExpression,
+      },
+      children: template.templates.flatMap((t) =>
+        convertTemplate(t, { ...context, inLoop: true }),
+      ),
+      elseChildren:
+        template.elseTemplates && template.elseTemplates.length > 0
+          ? template.elseTemplates.flatMap((t) =>
+              convertTemplate(t, { ...context, inLoop: true }),
+            )
+          : undefined,
+      trimLeft: template.token.trimLeft,
+      trimRight: template.token.trimRight,
+    },
+  ];
+}
+
+/**
+ * Parses collection expression for loops
+ */
+function parseCollectionExpression(collectionString, context) {
+  try {
+    const liquid = new Liquid();
+    const parsed = liquid.parse(`{{ ${collectionString} }}`)[0];
+    const outputIr = convertTemplate(parsed, context)[0];
+    return outputIr.expression;
+  } catch (e) {
+    return {
+      postfix: [collectionString],
+      filters: [],
+    };
+  }
+}
+
+/**
+ * Handles comment template
+ */
+function handleCommentTemplate(template) {
+  const input = template.token.input;
+  const startTag = `{% comment %}`;
+  const endTag = `{% endcomment %}`;
+  const start = template.token.begin + startTag.length;
+  const endStart = input.indexOf(endTag, start);
+  const content = endStart > start ? input.slice(start, endStart) : "";
+
+  return [
+    {
+      type: "comment",
+      content: content,
+    },
+  ];
+}
+
+/**
+ * Handles raw template
+ */
+function handleRawTemplate(template) {
+  const content = template.tokens
+    ? template.tokens
+        .map((t) => template.token.input.slice(t.begin, t.end))
+        .join("")
+    : "";
+
+  return [
+    {
+      type: "raw",
+      content: content,
+      trimLeft: template.token.trimLeft,
+      trimRight: template.token.trimRight,
+    },
+  ];
+}
+
+/**
+ * Handles assign template
+ */
+function handleAssignTemplate(template, context) {
+  const args = template.token.args || "";
+  const [target, ...expressionParts] = args.split("=").map((s) => s.trim());
+  const expressionString = expressionParts.join("=").trim();
+
+  const liquid = new Liquid();
+  const expressionAst = liquid.parse(`{{ ${expressionString} }}`)[0];
+  const expressionIr = convertTemplate(expressionAst, context)[0];
+
+  return [
+    {
+      type: "assignment",
+      target: target || "",
+      expression: expressionIr.expression,
+      trimLeft: template.token.trimLeft,
+      trimRight: template.token.trimRight,
+    },
+  ];
+}
+
+/**
+ * Handles include template
+ */
+function handleIncludeTemplate(template, context) {
+  const args = template.token.args || "";
+  const liquid = new Liquid();
+  const templateAst = liquid.parse(`{{ ${args} }}`)[0];
+  const templateIr = convertTemplate(templateAst, context)[0];
+
+  return [
+    {
+      type: "include",
+      template: templateIr.expression,
+      trimLeft: template.token.trimLeft,
+      trimRight: template.token.trimRight,
+    },
+  ];
+}
+
+/**
+ * Handles generic tag template
+ */
+function handleGenericTag(template) {
+  return [
+    {
+      type: "tag",
+      name: template.name,
+      args: template.token.args,
+      children: [],
+      trimLeft: template.token.trimLeft,
+      trimRight: template.token.trimRight,
+    },
+  ];
+}
+
+/**
+ * Token kind handlers mapped by TokenKind
+ */
+const TOKEN_HANDLERS = {
+  [TokenKind.HTML]: handleHtmlToken,
+  [TokenKind.Output]: handleOutputToken,
+  [TokenKind.Tag]: (template, context) => {
+    if (template.branches) {
+      return handleConditionalTemplate(template, context);
+    }
+
+    if (template.templates) {
+      if (template.name === "capture") {
+        return handleCaptureTemplate(template, context);
+      }
+      return handleLoopTemplate(template, context);
+    }
+
+    const TAG_HANDLERS = {
+      comment: handleCommentTemplate,
+      raw: handleRawTemplate,
+      assign: handleAssignTemplate,
+      include: handleIncludeTemplate,
+    };
+
+    const handler = TAG_HANDLERS[template.name];
+    return handler ? handler(template, context) : handleGenericTag(template);
+  },
+};
+
+/**
  * Converts a Liquid token to an intermediate representation (IR) node.
  * @param {import("liquidjs").Template} template - The Liquid token to convert.
  * @param {Object} context - Parsing context
@@ -226,240 +525,9 @@ function valueToExpression(value, context, template) {
  * @returns {IrNode[]} The corresponding IR nodes.
  */
 function convertTemplate(template, context = { inLoop: false }) {
-  switch (template.token.kind) {
-    case TokenKind.HTML:
-      return [
-        {
-          type: "text",
-          // @ts-ignore
-          content: template.str,
-        },
-      ];
-    case TokenKind.Output:
-      return [
-        {
-          type: "output",
-          expression: valueToExpression(template.value, context, template),
-          trimLeft: template.token.trimLeft,
-          trimRight: template.token.trimRight,
-        },
-      ];
-    case TokenKind.Tag:
-      // @ts-ignore
-      if (template.branches) {
-        let branches;
-
-        if (template.name === "case") {
-          const caseExpression = valueToExpression(
-            template.value,
-            context,
-            template,
-          );
-          branches = [
-            {
-              condition: caseExpression,
-              children: [], // Case expression has no direct children
-            },
-          ];
-
-          template.branches.forEach((branch) => {
-            const whenValues = branch.values
-              ? branch.values.map((v) => `'${v.content}'`).join(", ")
-              : null;
-            // Create an IrExpression for when values
-            const whenCondition = whenValues
-              ? {
-                  postfix: [whenValues],
-                  filters: [],
-                }
-              : null;
-            branches.push({
-              condition: whenCondition,
-              children: branch.templates
-                ? branch.templates.flatMap((t) => convertTemplate(t, context))
-                : [],
-            });
-          });
-        } else {
-          branches = template.branches.map((branch, index) => ({
-            condition: valueToExpression(branch.value, context, template),
-            children: branch.templates
-              ? branch.templates.flatMap((t) => convertTemplate(t, context))
-              : [],
-          }));
-        }
-
-        if (template.elseTemplates && template.elseTemplates.length > 0) {
-          branches.push({
-            condition: null,
-            children: template.elseTemplates.flatMap((t) =>
-              convertTemplate(t, context),
-            ),
-          });
-        }
-
-        return [
-          {
-            type: "conditional",
-            variant:
-              template.name === "case"
-                ? "case"
-                : template.name === "unless"
-                  ? "unless"
-                  : "if",
-            branches: branches,
-            trimLeft: template.token.trimLeft,
-            trimRight: template.token.trimRight,
-          },
-        ];
-      }
-
-      if (template.templates) {
-        if (template.name === "capture") {
-          return [
-            {
-              type: "assignment",
-              target: template.token.args,
-              expression: null, // Block assignment has no expression
-              children: template.templates.flatMap((t) =>
-                convertTemplate(t, context),
-              ),
-              trimLeft: template.token.trimLeft,
-              trimRight: template.token.trimRight,
-            },
-          ];
-        }
-
-        // Parse loop args into variable and collection
-        const loopArgs = template.token.args || "";
-        const [variable, ...collectionParts] = loopArgs
-          .split(" in ")
-          .map((s) => s.trim());
-        const collectionString = collectionParts.join(" in ");
-
-        // Parse the collection as an expression
-        const liquid = new Liquid();
-        let collectionExpression;
-        try {
-          const parsed = liquid.parse(`{{ ${collectionString} }}`)[0];
-          const outputIr = convertTemplate(parsed, context)[0];
-          collectionExpression = outputIr.expression;
-        } catch (e) {
-          // Fallback to simple expression
-          collectionExpression = {
-            postfix: [collectionString],
-            filters: [],
-          };
-        }
-
-        return [
-          {
-            type: "loop",
-            args: {
-              variable: variable,
-              collection: collectionExpression,
-            },
-            children: template.templates.flatMap((t) =>
-              convertTemplate(t, { ...context, inLoop: true }),
-            ),
-            elseChildren:
-              template.elseTemplates && template.elseTemplates.length > 0
-                ? template.elseTemplates.flatMap((t) =>
-                    convertTemplate(t, { ...context, inLoop: true }),
-                  )
-                : undefined,
-            trimLeft: template.token.trimLeft,
-            trimRight: template.token.trimRight,
-          },
-        ];
-      }
-
-      if (template.name === "comment") {
-        // Extract comment content from raw input
-        const input = template.token.input;
-        const startTag = `{% comment %}`;
-        const endTag = `{% endcomment %}`;
-        const start = template.token.begin + startTag.length;
-        const endStart = input.indexOf(endTag, start);
-        const content = endStart > start ? input.slice(start, endStart) : "";
-
-        return [
-          {
-            type: "comment",
-            content: content,
-          },
-        ];
-      }
-
-      if (template.name === "raw") {
-        // Extract raw content from tokens
-        const content = template.tokens
-          ? template.tokens
-              .map((t) => template.token.input.slice(t.begin, t.end))
-              .join("")
-          : "";
-
-        return [
-          {
-            type: "raw",
-            content: content,
-            trimLeft: template.token.trimLeft,
-            trimRight: template.token.trimRight,
-          },
-        ];
-      }
-
-      if (template.name === "assign") {
-        const args = template.token.args || "";
-        const [target, ...expressionParts] = args
-          .split("=")
-          .map((s) => s.trim());
-        const expressionString = expressionParts.join("=").trim();
-
-        const liquid = new Liquid();
-        const expressionAst = liquid.parse(`{{ ${expressionString} }}`)[0];
-        const expressionIr = convertTemplate(expressionAst, context)[0];
-
-        return [
-          {
-            type: "assignment",
-            target: target || "",
-            expression: expressionIr.expression, // Extract the expression from the output node
-            trimLeft: template.token.trimLeft,
-            trimRight: template.token.trimRight,
-          },
-        ];
-      }
-
-      if (template.name === "include") {
-        const args = template.token.args || "";
-
-        // Parse the template name as an expression
-        const liquid = new Liquid();
-        const templateAst = liquid.parse(`{{ ${args} }}`)[0];
-        const templateIr = convertTemplate(templateAst, context)[0];
-
-        return [
-          {
-            type: "include",
-            template: templateIr.expression,
-            trimLeft: template.token.trimLeft,
-            trimRight: template.token.trimRight,
-          },
-        ];
-      }
-
-      return [
-        {
-          type: "tag",
-          name: template.name,
-          args: template.token.args,
-          children: [],
-          trimLeft: template.token.trimLeft,
-          trimRight: template.token.trimRight,
-        },
-      ];
-    default:
-      throw new Error(`Unsupported token kind: ${template.token.kind}`);
+  const handler = TOKEN_HANDLERS[template.token.kind];
+  if (!handler) {
+    throw new Error(`Unsupported token kind: ${template.token.kind}`);
   }
+  return handler(template, context);
 }

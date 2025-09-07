@@ -75,6 +75,7 @@ function renderOutputExpression(node) {
     .map((part, i) => {
       if (i === 0) {
         if (part === null) return "null";
+        if (part === "") return "blank"; // Convert empty string back to Liquid's blank keyword
         // Convert special IR loop variable back to liquid forloop
         if (part === IR_LOOP_VAR) return "forloop";
         return part;

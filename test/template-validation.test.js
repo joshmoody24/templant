@@ -24,13 +24,23 @@ describe("Template syntax validation", () => {
       Object.entries(testTemplates).forEach(([testName, templates]) => {
         if (templates[language]) {
           test(`${testName} has valid ${language} syntax`, () => {
-            try {
-              validators[language](templates[language]);
-            } catch (error) {
-              assert.fail(
-                `${language} template for '${testName}' is invalid: ${error.message}`,
-              );
-            }
+            const templateData = templates[language];
+            const templatesToTest = Array.isArray(templateData)
+              ? templateData
+              : [templateData];
+
+            templatesToTest.forEach((template, index) => {
+              try {
+                validators[language](template);
+              } catch (error) {
+                const arrayInfo = Array.isArray(templateData)
+                  ? ` (variant ${index + 1})`
+                  : "";
+                assert.fail(
+                  `${language} template for '${testName}'${arrayInfo} is invalid: ${error.message}`,
+                );
+              }
+            });
           });
         }
       });

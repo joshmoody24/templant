@@ -27,6 +27,24 @@ const IR_OPERATOR_FILTERS = {
   [IR_FILTERS.CONTAINS]: "in",
 };
 
+// Operator precedence (higher number = higher precedence)
+const OPERATOR_PRECEDENCE = {
+  [IR_FILTERS.LOGICAL_OR]: 1,
+  [IR_FILTERS.LOGICAL_AND]: 2,
+  [IR_FILTERS.COMPARE_EQ]: 3,
+  [IR_FILTERS.COMPARE_NE]: 3,
+  [IR_FILTERS.COMPARE_GT]: 3,
+  [IR_FILTERS.COMPARE_GTE]: 3,
+  [IR_FILTERS.COMPARE_LT]: 3,
+  [IR_FILTERS.COMPARE_LTE]: 3,
+  [IR_FILTERS.CONTAINS]: 3,
+  [IR_FILTERS.ADD]: 4,
+  [IR_FILTERS.SUBTRACT]: 4,
+  [IR_FILTERS.MULTIPLY]: 5,
+  [IR_FILTERS.DIVIDE]: 5,
+  [IR_FILTERS.MODULO]: 5,
+};
+
 const IR_TO_NUNJUCKS_LOOP_PROPERTIES = {
   [IR_LOOP_REVINDEX]: "revindex",
 };
@@ -89,6 +107,7 @@ function renderOutputExpression(expr) {
     .map((part, i) => {
       if (i === 0) {
         if (part === null) return "null";
+        if (part === "") return "''"; // Convert empty string to quoted empty string
         if (part === IR_LOOP_VAR) return "loop";
         return part;
       }
@@ -104,13 +123,26 @@ function renderOutputExpression(expr) {
     .join("");
 
   let filterStr = "";
+  let lastOperatorPrecedence = Infinity; // Start with highest precedence
+
   for (const f of expr.filters) {
     const filterArgs = f.args
       ? f.args.map((arg) => renderOutputExpression(arg)).join(", ")
       : ""; // Render IrOutputNode arguments
     if (IR_OPERATOR_FILTERS[f.name]) {
       const operator = IR_OPERATOR_FILTERS[f.name];
+      const currentPrecedence = OPERATOR_PRECEDENCE[f.name] || 0;
+
+      // Add parentheses if the previous operation had lower precedence than current
+      if (
+        lastOperatorPrecedence < currentPrecedence &&
+        lastOperatorPrecedence !== Infinity
+      ) {
+        expression = `(${expression})`;
+      }
+
       expression = `${expression} ${operator} ${filterArgs}`;
+      lastOperatorPrecedence = currentPrecedence;
     } else if (f.name === IR_FILTERS.LOGICAL_NOT) {
       expression = `not ${expression}`;
     } else if (

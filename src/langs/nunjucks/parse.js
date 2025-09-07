@@ -466,6 +466,10 @@ function convertAstNode(node, originalTemplate, context) {
     "Mul",
     "Div",
     "Mod",
+    "Compare",
+    "And",
+    "Or",
+    "Not",
   ];
   if (expressionNodeTypes.includes(node.typename)) {
     const { trimLeft, trimRight } = extractWhitespaceControl(
@@ -730,6 +734,28 @@ function convertNunjucksExpressionToIrExpression(
         { name: IR_FILTERS.LOGICAL_NOT, args: [] },
       ],
     };
+  }
+
+  // Handle Group nodes (parenthesized expressions)
+  if (expressionNode.typename === "Group" && expressionNode.children) {
+    if (expressionNode.children.length === 1) {
+      return convertNunjucksExpressionToIrExpression(
+        expressionNode.children[0],
+        originalTemplate,
+        context,
+      );
+    } else if (expressionNode.children.length > 1) {
+      console.warn(
+        "Group node with multiple children - this might need special handling:",
+        expressionNode,
+      );
+      // For now, process the first child
+      return convertNunjucksExpressionToIrExpression(
+        expressionNode.children[0],
+        originalTemplate,
+        context,
+      );
+    }
   }
 
   // Default case for simple values (Symbol, Literal, LookupVal, Neg)

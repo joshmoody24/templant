@@ -1,3 +1,21 @@
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Helper function to load template files
+function loadTemplate(filename) {
+  try {
+    const filepath = path.join(__dirname, "templates", "complex", filename);
+    return fs.readFileSync(filepath, "utf8");
+  } catch (error) {
+    console.warn(`Failed to load template ${filename}:`, error.message);
+    return null;
+  }
+}
+
 /**
  * Test templates - equivalent templates across different template languages
  * Each key represents a test case, with equivalent templates for each supported language
@@ -189,5 +207,43 @@ export const testTemplates = {
     liquid: "{{ 42 }} {{ 3.14 }} {{ -5 }}",
     nunjucks: "{{ 42 }} {{ 3.14 }} {{ -5 }}",
     // mustache: "{{ number1 }} {{ number2 }} {{ number3 }}",
+  },
+  mathOperations: {
+    liquid:
+      "{{ price | plus: tax | times: quantity }} {{ 17 | modulo: 5 }} {{ total | minus: discount | divided_by: 100 }}",
+    nunjucks:
+      "{{ (price + tax) * quantity }} {{ 17 % 5 }} {{ (total - discount) / 100 }}",
+    // mustache: "{{ totalWithTax }} {{ remainder }} {{ discountedTotal }}",
+  },
+  comparisonOperations: {
+    liquid:
+      "{% if user.age >= 21 and score > average %}Premium{% elsif count != 0 %}Standard{% else %}None{% endif %}",
+    nunjucks:
+      "{% if user.age >= 21 and score > average %}Premium{% elif count != 0 %}Standard{% else %}None{% endif %}",
+    // mustache: "{{#isPremium}}Premium{{/isPremium}}{{^isPremium}}{{#hasCount}}Standard{{/hasCount}}{{^hasCount}}None{{/hasCount}}{{/isPremium}}",
+  },
+  complexConditionals: {
+    liquid:
+      "{% if user and user.posts.size > 0 %}{{ user.name }}: {{ user.posts.size }} posts{% else %}No active user{% endif %}",
+    nunjucks:
+      "{% if user and user.posts.size > 0 %}{{ user.name }}: {{ user.posts.size }} posts{% else %}No active user{% endif %}",
+    // mustache: "{{#activeUser}}{{ user.name }}: {{ postCount }} posts{{/activeUser}}{{^activeUser}}No active user{{/activeUser}}",
+  },
+  blankKeyword: {
+    liquid: [
+      "{% if description != blank %}{{ description }}{% else %}No description{% endif %}",
+      "{% if description != '' %}{{ description }}{% else %}No description{% endif %}",
+    ],
+    nunjucks:
+      "{% if description != '' %}{{ description }}{% else %}No description{% endif %}",
+    // Tests Liquid's blank keyword translation to empty string comparison
+  },
+  defaultValues: {
+    liquid: ["{{ title | default: 'Untitled' }}", "{{ title or 'Untitled' }}"],
+    nunjucks: [
+      "{{ title or 'Untitled' }}",
+      "{{ title | default('Untitled') }}",
+    ],
+    // Tests Liquid's default filter vs Nunjucks or operator
   },
 };

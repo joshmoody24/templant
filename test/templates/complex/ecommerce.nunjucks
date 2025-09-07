@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ shop.name | upper }} - {{ page.title or 'Home' }}</title>
+    {# Generated stylesheet based on theme settings #}
+    <link rel="stylesheet" href="/assets/theme.css?v={{ 'now' | date('%s') }}">
+</head>
+<body class="{% if customer %}logged-in{% else %}guest{% endif %}">
+    <header class="site-header">
+        <div class="container">
+            <h1 class="logo">
+                <a href="/">{{- shop.name -}}</a>
+            </h1>
+            
+            <nav class="main-nav">
+                {% for link in linklists.main.links %}
+                    <a href="{{ link.url }}" 
+                       {% if link.active %}class="active"{% endif %}>
+                        {{ link.title }}
+                    </a>
+                {% endfor %}
+            </nav>
+            
+            <div class="user-actions">
+                {% if customer %}
+                    <span>Hello, {{ customer.name.split(' ')[0] }}!</span>
+                    <a href="/account">Account</a>
+                    <a href="/cart" class="cart-link">
+                        Cart ({{ cart.item_count }})
+                        {% if cart.total_price > 0 %}
+                            - {{ cart.total_price | money }}
+                        {% endif %}
+                    </a>
+                {% else %}
+                    <a href="/account/login">Login</a>
+                    <a href="/account/register">Sign Up</a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        {% if template == 'product' %}
+            {% include 'product-details' %}
+        {% elif template == 'collection' %}
+            <div class="collection-header">
+                <h1>{{ collection.title }}</h1>
+                {% if collection.description %}
+                    <div class="collection-description">
+                        {{ collection.description | truncate(200) }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="product-grid">
+                {% set products_to_show = collection.products | selectattr('available') | list %}
+                {% for product in products_to_show %}
+                    {% if loop.index <= 24 %}
+                    <div class="product-card" data-price="{{ product.price }}">
+                        {% if product.featured_media %}
+                            <img src="{{ product.featured_media | img_url('400x400') }}" 
+                                 alt="{{ product.title | escape }}">
+                        {% endif %}
+                        
+                        <h3>{{ product.title }}</h3>
+                        
+                        {% if product.compare_at_price > product.price %}
+                            <div class="price-wrapper">
+                                <span class="sale-price">{{ product.price | money }}</span>
+                                <span class="original-price">{{ product.compare_at_price | money }}</span>
+                                {% set discount = product.compare_at_price - product.price %}
+                                {% set discount_percent = (discount * 100 / product.compare_at_price) | round %}
+                                <span class="discount-badge">{{ discount_percent }}% off</span>
+                            </div>
+                        {% else %}
+                            <div class="price">{{ product.price | money }}</div>
+                        {% endif %}
+                        
+                        {% if not product.available %}
+                            <div class="sold-out">Sold Out</div>
+                        {% else %}
+                            <button class="add-to-cart" data-product-id="{{ product.id }}">
+                                Add to Cart
+                            </button>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                {% else %}
+                    <p>No products found in this collection.</p>
+                {% endfor %}
+            </div>
+            
+            {% if collection.products.length > 24 %}
+                <div class="pagination">
+                    <!-- Pagination logic would go here -->
+                    <p>Showing {{ products_to_show.length }} of {{ collection.products.length }} products</p>
+                </div>
+            {% endif %}
+            
+        {% elif template == 'cart' %}
+            <div class="cart-page">
+                <h1>Shopping Cart</h1>
+                
+                {% if cart.item_count == 0 %}
+                    <p>Your cart is empty. <a href="/collections/all">Continue shopping</a></p>
+                {% else %}
+                    <div class="cart-items">
+                        {% for item in cart.items %}
+                            <div class="cart-item">
+                                <img src="{{ item.image | img_url('100x100') }}" alt="{{ item.title | escape }}">
+                                <div class="item-details">
+                                    <h4>{{ item.product.title }}</h4>
+                                    {% if not ('Default' in item.variant.title) %}
+                                        <p class="variant">{{ item.variant.title }}</p>
+                                    {% endif %}
+                                    <div class="quantity-price">
+                                        <span class="quantity">Qty: {{ item.quantity }}</span>
+                                        <span class="price">{{ item.final_line_price | money }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="cart-summary">
+                        <div class="subtotal">
+                            Subtotal: {{ cart.total_price | money }}
+                        </div>
+                        {% if cart.total_discount > 0 %}
+                            <div class="discount">
+                                Discount: -{{ cart.total_discount | money }}
+                            </div>
+                        {% endif %}
+                        <button class="checkout-btn">Proceed to Checkout</button>
+                    </div>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="home-page">
+                <section class="hero">
+                    <h2>{{ settings.hero_title or 'Welcome to our store' }}</h2>
+                    {% if settings.hero_subtitle %}
+                        <p>{{ settings.hero_subtitle }}</p>
+                    {% endif %}
+                </section>
+                
+                <section class="featured-products">
+                    <h3>Featured Products</h3>
+                    <div class="product-grid">
+                        {% set featured = collections.featured.products | sort(attribute='created_at', reverse=true) | list %}
+                        {% for product in featured %}
+                            {% if loop.index <= 8 %}
+                            {% set product_url = '/products/' + product.handle %}
+                            <a href="{{ product_url }}" class="featured-product">
+                                {% if product.images.length > 0 %}
+                                    <img src="{{ product.images[0] | img_url('300x300') }}" 
+                                         alt="{{ product.title | escape }}">
+                                {% endif %}
+                                <h4>{{ product.title | truncate(50) }}</h4>
+                                <p class="price">{{ product.price | money }}</p>
+                            </a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </section>
+            </div>
+        {% endif %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h5>Quick Links</h5>
+                    {% for link in linklists.footer.links %}
+                        <a href="{{ link.url }}">{{ link.title }}</a>
+                    {% endfor %}
+                </div>
+                
+                <div class="footer-section">
+                    <h5>Contact</h5>
+                    {% if shop.email %}
+                        <p>Email: {{ shop.email }}</p>
+                    {% endif %}
+                    {% if shop.phone %}
+                        <p>Phone: {{ shop.phone }}</p>
+                    {% endif %}
+                </div>
+                
+                <div class="footer-section newsletter">
+                    <h5>Newsletter</h5>
+                    <form action="/contact#newsletter" method="post">
+                        <input type="email" name="contact[email]" placeholder="Your email">
+                        <button type="submit">Subscribe</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; {{ 'now' | date('%Y') }} {{ shop.name }}. All rights reserved.</p>
+                {# Auto-generated copyright with current year #}
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Cart functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const addToCartButtons = document.querySelectorAll('.add-to-cart');
+            addToCartButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const productId = this.dataset.productId;
+                    // Add to cart logic would go here
+                    console.log('Adding product', productId, 'to cart');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
