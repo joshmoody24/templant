@@ -205,10 +205,8 @@ function convertTemplate(template, context = { inLoop: false }) {
 
         return [
           {
-            type: "tag",
-            name: "raw",
-            args: template.token.args,
-            children: content ? [{ type: "text", content: content }] : [],
+            type: "raw",
+            content: content,
             trimLeft: template.token.trimLeft,
             trimRight: template.token.trimRight,
           },

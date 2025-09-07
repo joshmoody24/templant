@@ -10,6 +10,7 @@ export type {
   IrLoopNode,
   IrCommentNode,
   IrAssignmentNode,
+  IrRawNode,
   Parser,
   Renderer,
   BuiltInLanguage,

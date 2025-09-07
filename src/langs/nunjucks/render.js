@@ -124,6 +124,11 @@ function renderNode(node) {
         return `${leftBrace} set ${node.target} = ${node.expression} ${rightBrace}`;
       }
     }
+    case "raw": {
+      const leftBrace = node.trimLeft ? "{%-" : "{%";
+      const rightBrace = node.trimRight ? "-%}" : "%}";
+      return `${leftBrace} raw ${rightBrace}${node.content}${leftBrace} endraw ${rightBrace}`;
+    }
     case "tag": {
       const leftBrace = node.trimLeft ? "{%-" : "{%";
       const rightBrace = node.trimRight ? "-%}" : "%}";

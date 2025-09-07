@@ -36,6 +36,32 @@ function convertAstNodes(nodes, originalTemplate, context = { inLoop: false }) {
  * @returns {IrNode[]} IR nodes
  */
 function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
+  // FIRST: Check if this is a raw block - nunjucks treats raw as special Output node
+  if (node.typename === "Output" && node.children?.length === 1) {
+    const child = node.children[0];
+    if (
+      child.typename === "TemplateData" &&
+      typeof child.value === "string" &&
+      child.colno !== undefined
+    ) {
+      // Check if this content is preceded by "{% raw %}" in the original template
+      const precedingText = originalTemplate.slice(0, child.colno + 10);
+      if (
+        precedingText.includes("{% raw %}") ||
+        precedingText.includes("{%raw%}")
+      ) {
+        return [
+          {
+            type: "raw",
+            content: child.value,
+            trimLeft: false,
+            trimRight: false,
+          },
+        ];
+      }
+    }
+  }
+
   // Check if this is an Output node with TemplateData (text) or Symbol (variable)
   if (node.typename === "Output" && node.children?.length === 1) {
     const child = node.children[0];

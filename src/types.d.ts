@@ -61,6 +61,13 @@ export interface IrAssignmentNode {
   trimRight?: boolean;
 }
 
+export interface IrRawNode {
+  type: "raw";
+  content: string;
+  trimLeft?: boolean;
+  trimRight?: boolean;
+}
+
 export type IrNode =
   | IrTextNode
   | IrOutputNode
@@ -68,7 +75,8 @@ export type IrNode =
   | IrConditionalNode
   | IrLoopNode
   | IrCommentNode
-  | IrAssignmentNode;
+  | IrAssignmentNode
+  | IrRawNode;
 
 export type Parser = (content: string) => IrNode[];
 export type Renderer = (ir: IrNode[]) => string;
