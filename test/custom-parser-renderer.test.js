@@ -31,8 +31,12 @@ describe("Custom parser and renderer", () => {
 
         tokens.push({
           type: "output",
-          postfix: varName.split("."),
-          filters: [],
+          expression: {
+            postfix: varName.split("."),
+            filters: [],
+          },
+          trimLeft: false,
+          trimRight: false,
         });
       } else {
         currentText += template[i];
@@ -55,7 +59,7 @@ describe("Custom parser and renderer", () => {
           case "text":
             return node.content;
           case "output":
-            return `{${node.postfix.join(".")}}`;
+            return `{${node.expression.postfix.join(".")}}`;
           case "tag":
             return `[${node.name}]`;
           default:

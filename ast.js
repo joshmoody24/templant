@@ -18,6 +18,15 @@ if (!["liquid", "nunjucks"].includes(language)) {
   process.exit(1);
 }
 
+if (language === "nunjucks") {
+  console.log("=== Nunjucks Tokens ===");
+  const lexer = nunjucks.lexer.lex(template);
+  let token;
+  while ((token = lexer.nextToken())) {
+    console.log(JSON.stringify(token, null, 2));
+  }
+}
+
 console.log("=== Real AST ===");
 if (language === "liquid") {
   const liquid = new Liquid();

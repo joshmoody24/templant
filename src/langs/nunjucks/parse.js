@@ -1,16 +1,77 @@
 import nunjucks from "nunjucks";
-import { IR_LOOP_VAR, LOOP_PROPERTY_MAP } from "../../ir-constants.js";
+import {
+  IR_LOOP_VAR,
+  IR_LOOP_REVINDEX,
+  IR_FILTERS,
+} from "../../ir-constants.js";
+
+const NUNJUCKS_FILTERS_TO_IR = {
+  upper: IR_FILTERS.UPPERCASE,
+  lower: IR_FILTERS.LOWERCASE,
+  trim: IR_FILTERS.TRIM,
+};
+
+const NUNJUCKS_LOOP_PROPERTIES_TO_IR = {
+  revindex: IR_LOOP_REVINDEX,
+};
+
+/**
+ * Factory functions for creating special IR filters from nunjucks filter args
+ */
+const NUNJUCKS_SPECIAL_FILTER_FACTORIES = {
+  truncate: (args) => ({
+    name: "truncate",
+    length: args[0],
+    killWords: args[1] && args[1].postfix[0] === true ? true : false,
+    end: args[2] || undefined,
+  }),
+
+  replace: (args) => ({
+    name: "replace",
+    old: args[0],
+    new: args[1],
+    flags: args[2] || undefined,
+  }),
+
+  selectattr: (args) => ({
+    name: "where",
+    attribute: args[0],
+    value: args[1] || undefined,
+  }),
+
+  sort: (args) => ({
+    name: "sort",
+    attribute: args[0] || undefined,
+    reverse: args[1] && args[1].postfix[0] === true ? true : false,
+  }),
+};
+
+const EMPTY_IR_EXPRESSION = {
+  postfix: [],
+  filters: [],
+};
 
 /**
  * Parses a Nunjucks template string and returns IR nodes
  * @type {Parser}
  */
 export function parse(template) {
-  const tokenizer = nunjucks.lexer.lex(template);
+  const comments = [];
+  const commentRegex = /{#(.*?)#}/gs;
+  const processedTemplate = template.replace(commentRegex, (match, content) => {
+    const placeholder = `{{ __COMMENT_${comments.length}__ }}`;
+    comments.push(content.trim());
+    return placeholder;
+  });
+
+  const tokenizer = nunjucks.lexer.lex(processedTemplate);
   const parser = new nunjucks.parser.Parser();
   parser.init(tokenizer, {});
   const ast = parser.parseAsRoot();
-  return convertAstNodes(ast.children || [], template, { inLoop: false });
+  return convertAstNodes(ast.children || [], processedTemplate, {
+    inLoop: false,
+    comments,
+  });
 }
 
 /**
@@ -19,9 +80,10 @@ export function parse(template) {
  * @param {string} originalTemplate - Original template string for literal extraction
  * @param {Object} context - Parsing context
  * @param {boolean} context.inLoop - Whether we're inside a loop
- * @returns {IrNode[]} IR nodes
+ * @param {string[]} context.comments - Array of extracted comments
+ * @returns {IrNode[]}
  */
-function convertAstNodes(nodes, originalTemplate, context = { inLoop: false }) {
+function convertAstNodes(nodes, originalTemplate, context) {
   return nodes.flatMap((node) =>
     convertAstNode(node, originalTemplate, context),
   );
@@ -32,10 +94,25 @@ function convertAstNodes(nodes, originalTemplate, context = { inLoop: false }) {
  * @param {Object} node - Nunjucks Ast node
  * @param {string} originalTemplate - Original template string for literal extraction
  * @param {Object} context - Parsing context
- * @param {boolean} context.inLoop - Whether we're inside a loop
- * @returns {IrNode[]} IR nodes
+ * @returns {IrNode[]}
  */
-function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
+function convertAstNode(node, originalTemplate, context) {
+  if (
+    node.typename === "Output" &&
+    typeof node.children[0].value === "string" &&
+    node.children[0].value?.includes("__COMMENT_")
+  ) {
+    const commentIndex = parseInt(
+      node.children[0].value.split("__COMMENT_")[1],
+    );
+    return [
+      {
+        type: "comment",
+        content: context.comments[commentIndex],
+      },
+    ];
+  }
+
   // FIRST: Check if this is a raw block - nunjucks treats raw as special Output node
   if (node.typename === "Output" && node.children?.length === 1) {
     const child = node.children[0];
@@ -76,37 +153,46 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
       ];
     } else if (child.typename === "Symbol") {
       // This is a variable output node
+      const { trimLeft, trimRight } = extractWhitespaceControl(
+        originalTemplate,
+        child.colno,
+      );
       return [
         {
           type: "output",
-          postfix: [child.value],
-          filters: [],
-          trimLeft: false,
-          trimRight: false,
+          expression: {
+            postfix: [child.value],
+            filters: [],
+          },
+          trimLeft,
+          trimRight,
         },
       ];
     } else if (child.typename === "LookupVal") {
       // This is property access like user.name
-      let postfix = [];
-      if (child.target && child.val) {
-        postfix = [child.target.value, child.val.value];
-        // Normalize nunjucks loop variables to standard in IR when in loop context
-        if (context.inLoop && postfix[0] === "loop") {
-          postfix[0] = IR_LOOP_VAR;
-          // Also normalize nunjucks-specific property names
-          if (postfix[1] && LOOP_PROPERTY_MAP[postfix[1]]) {
-            postfix[1] = LOOP_PROPERTY_MAP[postfix[1]];
-          }
+      let postfix = buildPostfix(child, originalTemplate);
+
+      // Normalize loop variables
+      if (context.inLoop && postfix[0] === "loop") {
+        postfix[0] = IR_LOOP_VAR;
+        if (postfix[1] && NUNJUCKS_LOOP_PROPERTIES_TO_IR[postfix[1]]) {
+          postfix[1] = NUNJUCKS_LOOP_PROPERTIES_TO_IR[postfix[1]];
         }
       }
 
+      const { trimLeft, trimRight } = extractWhitespaceControl(
+        originalTemplate,
+        child.colno,
+      );
       return [
         {
           type: "output",
-          postfix,
-          filters: [],
-          trimLeft: false,
-          trimRight: false,
+          expression: {
+            postfix,
+            filters: [],
+          },
+          trimLeft,
+          trimRight,
         },
       ];
     } else if (child.typename === "Literal") {
@@ -125,48 +211,50 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
         }
       }
 
+      const { trimLeft, trimRight } = extractWhitespaceControl(
+        originalTemplate,
+        child.colno,
+      );
       return [
         {
           type: "output",
-          postfix: [literalValue],
-          filters: [],
-          trimLeft: false,
-          trimRight: false,
+          expression: {
+            postfix: [literalValue],
+            filters: [],
+          },
+          trimLeft,
+          trimRight,
         },
       ];
     } else if (child.typename === "Neg") {
       // This is a negative number
+      const { trimLeft, trimRight } = extractWhitespaceControl(
+        originalTemplate,
+        child.colno,
+      );
       return [
         {
           type: "output",
-          postfix: [`-${child.target.value}`],
-          filters: [],
-          trimLeft: false,
-          trimRight: false,
+          expression: {
+            postfix: [`-${child.target.value}`],
+            filters: [],
+          },
+          trimLeft,
+          trimRight,
         },
       ];
     } else if (child.typename === "Filter") {
-      // This is a filtered expression
-      const baseExpression = extractPostfixFromNode(child.args.children[0]);
-      const filters = [
-        {
-          name: child.name.value,
-          args:
-            child.args.children.length > 1
-              ? child.args.children
-                  .slice(1)
-                  .map((arg) => extractLiteralValue(arg))
-              : undefined,
-        },
-      ];
-
+      const expression = parseFilterChain(child, originalTemplate, context);
+      const { trimLeft, trimRight } = extractWhitespaceControl(
+        originalTemplate,
+        child.colno,
+      );
       return [
         {
           type: "output",
-          postfix: baseExpression,
-          filters,
-          trimLeft: false,
-          trimRight: false,
+          expression,
+          trimLeft,
+          trimRight,
         },
       ];
     }
@@ -178,30 +266,45 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
 
     if (node.value) {
       // Inline assignment: {% set x = y %}
-      const expression = extractComplexExpression(node.value);
+      const expressionIr = convertNunjucksExpressionToIrExpression(
+        node.value,
+        originalTemplate,
+        context,
+      );
+
+      const { trimLeft, trimRight } = extractWhitespaceControl(
+        originalTemplate,
+        node.colno || 0,
+      );
+
       return [
         {
           type: "assignment",
           target,
-          expression,
-          trimLeft: false,
-          trimRight: false,
+          expression: expressionIr,
+          trimLeft,
+          trimRight,
         },
       ];
     } else if (node.body?.body?.children) {
       // Block assignment: {% set x %}...{% endset %}
+      const { trimLeft, trimRight } = extractWhitespaceControl(
+        originalTemplate,
+        node.colno || 0,
+      );
+
       return [
         {
           type: "assignment",
           target,
-          expression: "",
+          expression: null,
           children: convertAstNodes(
             node.body.body.children,
             originalTemplate,
             context,
           ),
-          trimLeft: false,
-          trimRight: false,
+          trimLeft,
+          trimRight,
         },
       ];
     }
@@ -211,7 +314,7 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
       {
         type: "assignment",
         target,
-        expression: "",
+        expression: null,
         trimLeft: false,
         trimRight: false,
       },
@@ -223,7 +326,14 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
     return [
       {
         type: "loop",
-        args: `${node.name.value} in ${node.arr.value}`,
+        args: {
+          variable: node.name.value,
+          collection: convertNunjucksExpressionToIrExpression(
+            node.arr,
+            originalTemplate,
+            context,
+          ),
+        },
         children: convertAstNodes(node.body?.children || [], originalTemplate, {
           ...context,
           inLoop: true,
@@ -234,8 +344,7 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
               inLoop: true,
             })
           : undefined,
-        trimLeft: false,
-        trimRight: false,
+        ...extractWhitespaceControl(originalTemplate, node.colno || 0),
       },
     ];
   }
@@ -243,68 +352,101 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
   if (node.cond && node.body) {
     // This is a conditional node (if statement)
     const branches = [];
+    let current = node;
 
-    // Check if this is a "not" condition that should become "unless"
-    const isUnlessCondition = node.cond.typename === "Not";
-    let variant = "if";
-    let condition = extractExpression(node.cond);
-
-    if (isUnlessCondition) {
-      // Convert "not expr" to "unless expr"
-      variant = "unless";
-      condition = extractExpression(node.cond.target); // Extract the target without "not"
-    }
-
-    // Main condition
-    branches.push({
-      condition,
-      children: convertAstNodes(
-        node.body.children || [],
-        originalTemplate,
-        context,
-      ),
-    });
-
-    // Handle elif branches (not valid for unless, so keep as if)
-    if (node.elif_) {
-      // If we have elif branches, this can't be an unless statement
-      variant = "if";
-      if (isUnlessCondition) {
-        // Restore the "not" for the first condition since we have elif
-        branches[0].condition = extractExpression(node.cond);
-      }
-
-      node.elif_.forEach((elifNode) => {
-        branches.push({
-          condition: extractExpression(elifNode.cond),
-          children: convertAstNodes(
-            elifNode.body.children || [],
-            originalTemplate,
-            context,
-          ),
-        });
+    // Loop through if/elif chain
+    while (current && current.cond) {
+      branches.push({
+        condition: convertNunjucksExpressionToIrExpression(
+          current.cond,
+          originalTemplate,
+          context,
+        ),
+        children: convertAstNodes(
+          current.body.children || [],
+          originalTemplate,
+          context,
+        ),
       });
+      current = current.else_;
     }
 
-    // Handle else branch
-    if (node.else_) {
+    // Handle final else branch
+    if (current) {
       branches.push({
         condition: null,
         children: convertAstNodes(
-          node.else_.children || [],
+          current.children || [],
           originalTemplate,
           context,
         ),
       });
     }
 
+    const firstBranchCondition = branches[0].condition;
+    const isUnless = firstBranchCondition.filters.some(
+      (f) => f.name === IR_FILTERS.LOGICAL_NOT,
+    );
+    let variant = "if";
+
+    if (isUnless && branches.length === 1) {
+      variant = "unless";
+      branches[0].condition.filters = branches[0].condition.filters.filter(
+        (f) => f.name !== IR_FILTERS.LOGICAL_NOT,
+      );
+    } else if (
+      isUnless &&
+      branches.length === 2 &&
+      branches[1].condition === null &&
+      branches[1].children.length === 0
+    ) {
+      // This handles `unless ... else %}{% endunless` which is not valid liquid
+      // but nunjucks allows it. For now, we convert to if.
+      // To be a true unless, there should be no `else`.
+      variant = "unless";
+      branches[0].condition.filters = branches[0].condition.filters.filter(
+        (f) => f.name !== IR_FILTERS.LOGICAL_NOT,
+      );
+      branches.pop();
+    }
+
+    const { trimLeft, trimRight } = extractWhitespaceControl(
+      originalTemplate,
+      node.colno || 0,
+    );
+
     return [
       {
         type: "conditional",
         variant,
         branches,
-        trimLeft: false,
-        trimRight: false,
+        trimLeft,
+        trimRight,
+      },
+    ];
+  }
+
+  // Handle include statements (doesn't have typename but has template property)
+  if (
+    node.template &&
+    node.template.value &&
+    node.ignoreMissing !== undefined
+  ) {
+    const templateValue = node.template.value;
+    const { trimLeft, trimRight } = extractWhitespaceControl(
+      originalTemplate,
+      node.colno,
+    );
+
+    return [
+      {
+        type: "include",
+        template: {
+          postfix: [`'${templateValue}'`],
+          filters: [],
+        },
+        trimLeft,
+        trimRight,
       },
     ];
   }
@@ -314,145 +456,335 @@ function convertAstNode(node, originalTemplate, context = { inLoop: false }) {
     return convertAstNodes(node.children, originalTemplate, context);
   }
 
+  // Handle standalone expression nodes (Filter, Symbol, etc.) that should be outputs
+  const expressionNodeTypes = [
+    "Filter",
+    "Symbol",
+    "Literal",
+    "Add",
+    "Sub",
+    "Mul",
+    "Div",
+    "Mod",
+  ];
+  if (expressionNodeTypes.includes(node.typename)) {
+    const { trimLeft, trimRight } = extractWhitespaceControl(
+      originalTemplate,
+      node.colno || 0,
+    );
+    const expression = convertNunjucksExpressionToIrExpression(
+      node,
+      originalTemplate,
+      context,
+    );
+
+    return [
+      {
+        type: "output",
+        expression,
+        trimLeft,
+        trimRight,
+      },
+    ];
+  }
+
   // Unknown node type
-  console.warn("Unknown nunjucks Ast node:", node);
+  console.warn("Unknown nunjucks Ast node:", node.typename, node);
   return [];
 }
 
-/**
- * Extracts expression text from a nunjucks expression node
- * @param {Object} expr - Nunjucks expression node
- * @returns {string} Expression as string
- */
-function extractExpression(expr) {
-  if (!expr) return "";
-
-  if (expr.typename === "Not") {
-    // Handle not expressions
-    const target = extractExpression(expr.target);
-    return `not ${target}`;
-  }
-
-  if (expr.typename === "LookupVal" && expr.target && expr.val) {
-    // Handle nested property access like user.banned
-    const target = extractExpression(expr.target);
-    const val = expr.val.value || expr.val;
-    return `${target}.${val}`;
-  }
-
-  if (expr.typename === "Symbol") {
-    return expr.value;
-  }
-
-  if (expr.value !== undefined) {
-    return expr.value;
-  }
-
-  if (expr.target && expr.val) {
-    return `${expr.target.value}.${expr.val.value}`;
-  }
-
-  // For complex expressions, we might need more sophisticated handling
-  return JSON.stringify(expr);
-}
-
-/**
- * Extracts postfix array from a nunjucks node
- * @param {Object} node - Nunjucks node
- * @returns {string[]} Postfix array for IR
- */
-function extractPostfixFromNode(node) {
+function buildPostfix(node, originalTemplate) {
   if (!node) return [];
-
   if (node.typename === "Symbol") {
     return [node.value];
   }
-
-  if (node.typename === "LookupVal" && node.target && node.val) {
-    return [node.target.value, node.val.value];
+  if (node.typename === "LookupVal") {
+    return [...buildPostfix(node.target, originalTemplate), node.val.value];
   }
-
   if (node.typename === "Literal") {
+    // For string literals, try to preserve original format with quotes
+    if (
+      typeof node.value === "string" &&
+      originalTemplate &&
+      node.colno !== undefined
+    ) {
+      const extracted = extractStringLiteral(originalTemplate, node.colno);
+      if (extracted) {
+        return [extracted];
+      }
+    }
     return [node.value];
   }
+  return [];
+}
 
-  // Default fallback
-  return [node.value || "unknown"];
+function parseFilterChain(node, originalTemplate, context) {
+  if (node.typename !== "Filter") {
+    return { postfix: buildPostfix(node, originalTemplate), filters: [] };
+  }
+
+  const { postfix, filters } = parseFilterChain(
+    node.args.children[0],
+    originalTemplate,
+    context,
+  );
+  const filterName = node.name.value;
+  const irFilterName = NUNJUCKS_FILTERS_TO_IR[filterName] || filterName;
+
+  const args =
+    node.args.children.length > 1
+      ? node.args.children
+          .slice(1)
+          .map((arg) =>
+            convertNunjucksExpressionToIrExpression(
+              arg,
+              originalTemplate,
+              context,
+            ),
+          )
+      : [];
+
+  // Handle special filters using factory functions
+  const factory = NUNJUCKS_SPECIAL_FILTER_FACTORIES[filterName];
+  if (factory) {
+    // Check if we have named arguments (KeywordArgs)
+    const rawArgs = node.args.children.slice(1);
+    if (
+      rawArgs.length > 0 &&
+      rawArgs[0].children &&
+      rawArgs[0].children[0]?.key
+    ) {
+      // Handle named arguments
+      const namedArgs = rawArgs[0].children;
+      const processedArgs = {};
+
+      namedArgs.forEach((namedArg) => {
+        const key = namedArg.key.value;
+        const value = convertNunjucksExpressionToIrExpression(
+          namedArg.value,
+          originalTemplate,
+          context,
+        );
+        processedArgs[key] = value;
+      });
+
+      // Create special filter from named arguments
+      if (filterName === "sort") {
+        const specialFilter = {
+          name: "sort",
+          attribute: processedArgs.attribute || undefined,
+          reverse: processedArgs.reverse === "true" ? true : false,
+        };
+        return { postfix, filters: [...filters, specialFilter] };
+      } else if (filterName === "selectattr") {
+        const specialFilter = {
+          name: "where",
+          attribute: processedArgs.attribute || args[0],
+          value: processedArgs.value || args[1] || undefined,
+        };
+        return { postfix, filters: [...filters, specialFilter] };
+      }
+    }
+
+    // Fallback to positional arguments
+    const specialFilter = factory(args);
+    return { postfix, filters: [...filters, specialFilter] };
+  }
+
+  // Regular filter
+  const newFilter = {
+    name: irFilterName,
+    args: args.length > 0 ? args : undefined,
+  };
+
+  return { postfix, filters: [...filters, newFilter] };
+}
+
+function convertNunjucksExpressionToIrExpression(
+  expressionNode,
+  originalTemplate,
+  context,
+) {
+  if (!expressionNode) {
+    // Add this check
+    return EMPTY_IR_EXPRESSION;
+  }
+  if (expressionNode.typename === "Filter") {
+    const { postfix, filters } = parseFilterChain(
+      expressionNode,
+      originalTemplate,
+      context,
+    );
+    return {
+      postfix,
+      filters,
+    };
+  }
+
+  if (
+    expressionNode.typename === "Add" ||
+    expressionNode.typename === "Sub" ||
+    expressionNode.typename === "Mul" ||
+    expressionNode.typename === "Div" ||
+    expressionNode.typename === "Mod"
+  ) {
+    const opMap = {
+      Add: IR_FILTERS.ADD,
+      Sub: IR_FILTERS.SUBTRACT,
+      Mul: IR_FILTERS.MULTIPLY,
+      Div: IR_FILTERS.DIVIDE,
+      Mod: IR_FILTERS.MODULO,
+    };
+    const leftExpression = convertNunjucksExpressionToIrExpression(
+      expressionNode.left,
+      originalTemplate,
+      context,
+    );
+    const rightExpression = convertNunjucksExpressionToIrExpression(
+      expressionNode.right,
+      originalTemplate,
+      context,
+    );
+
+    const newFilter = {
+      name: opMap[expressionNode.typename],
+      args: [rightExpression], // Pass IrExpression directly
+    };
+
+    return {
+      postfix: leftExpression.postfix,
+      filters: [...leftExpression.filters, newFilter],
+    };
+  }
+
+  if (expressionNode.typename === "Compare") {
+    const leftExpression = convertNunjucksExpressionToIrExpression(
+      expressionNode.expr,
+      originalTemplate,
+      context,
+    );
+    const rightExpression = convertNunjucksExpressionToIrExpression(
+      expressionNode.ops[0].expr,
+      originalTemplate,
+      context,
+    );
+    const opMap = {
+      "==": IR_FILTERS.COMPARE_EQ,
+      "!=": IR_FILTERS.COMPARE_NE,
+      ">": IR_FILTERS.COMPARE_GT,
+      ">=": IR_FILTERS.COMPARE_GTE,
+      "<": IR_FILTERS.COMPARE_LT,
+      "<=": IR_FILTERS.COMPARE_LTE,
+    };
+    const op = opMap[expressionNode.ops[0].type] || expressionNode.ops[0].type;
+
+    return {
+      postfix: leftExpression.postfix,
+      filters: [
+        ...leftExpression.filters,
+        { name: op, args: [rightExpression] },
+      ],
+    };
+  }
+
+  if (
+    expressionNode.typename === "And" ||
+    expressionNode.typename === "Or" ||
+    expressionNode.typename === "Xor"
+  ) {
+    const opMap = {
+      And: IR_FILTERS.LOGICAL_AND,
+      Or: IR_FILTERS.LOGICAL_OR,
+      Xor: "xor",
+    }; // Xor is not in IR_FILTERS
+    const leftExpression = convertNunjucksExpressionToIrExpression(
+      expressionNode.left,
+      originalTemplate,
+      context,
+    );
+    const rightExpression = convertNunjucksExpressionToIrExpression(
+      expressionNode.right,
+      originalTemplate,
+      context,
+    );
+
+    return {
+      postfix: leftExpression.postfix,
+      filters: [
+        ...leftExpression.filters,
+        { name: opMap[expressionNode.typename], args: [rightExpression] },
+      ],
+    };
+  }
+
+  if (expressionNode.typename === "Not") {
+    const targetExpression = convertNunjucksExpressionToIrExpression(
+      expressionNode.target,
+      originalTemplate,
+      context,
+    );
+    return {
+      postfix: targetExpression.postfix,
+      filters: [
+        ...targetExpression.filters,
+        { name: IR_FILTERS.LOGICAL_NOT, args: [] },
+      ],
+    };
+  }
+
+  // Default case for simple values (Symbol, Literal, LookupVal, Neg)
+  return {
+    postfix: buildPostfix(expressionNode, originalTemplate),
+    filters: [],
+  };
 }
 
 /**
- * Extracts literal value from a nunjucks node for filter arguments
- * @param {Object} node - Nunjucks node
- * @returns {string} Literal value as string
+ * Extracts whitespace control information from template
+ * @param {string} template - Original template string
+ * @param {number} startCol - Start column of the output node
+ * @returns {{trimLeft: boolean, trimRight: boolean}}
  */
-function extractLiteralValue(node) {
-  if (!node) return "";
+function extractWhitespaceControl(template, startCol) {
+  // Find the start of the output expression by looking backwards from startCol
+  let searchStart = Math.max(0, startCol - 10);
+  let varStart = -1;
+  let varEnd = -1;
 
-  if (node.typename === "Literal") {
-    return typeof node.value === "string"
-      ? `"${node.value}"`
-      : String(node.value);
+  // Look for {{ or {%
+  for (let i = searchStart; i < template.length - 1; i++) {
+    if (
+      template[i] === "{" &&
+      (template[i + 1] === "{" || template[i + 1] === "%")
+    ) {
+      varStart = i;
+      break;
+    }
   }
 
-  if (node.value !== undefined) {
-    return String(node.value);
+  if (varStart === -1) return { trimLeft: false, trimRight: false };
+
+  // Find the end }} or %}
+  for (let i = varStart + 2; i < template.length - 1; i++) {
+    if (
+      (template[i] === "}" || template[i] === "%") &&
+      template[i + 1] === "}"
+    ) {
+      varEnd = i + 2;
+      break;
+    }
   }
 
-  return "unknown";
-}
+  if (varEnd === -1) return { trimLeft: false, trimRight: false };
 
-/**
- * Extracts complex expression from a nunjucks node (handles operators, etc.)
- * @param {Object} node - Nunjucks expression node
- * @returns {string} Expression as string
- */
-function extractComplexExpression(node) {
-  if (!node) return "";
+  // Extract the full tag
+  const tag = template.slice(varStart, varEnd);
 
-  if (node.typename === "Add") {
-    const left = extractComplexExpression(node.left);
-    const right = extractComplexExpression(node.right);
-    return `${left} + ${right}`;
-  }
+  // Check for trim markers
+  const trimLeft = tag.startsWith("{{-") || tag.startsWith("{%-");
+  const trimRight = tag.endsWith("-}}") || tag.endsWith("-%}");
 
-  if (node.typename === "Sub") {
-    const left = extractComplexExpression(node.left);
-    const right = extractComplexExpression(node.right);
-    return `${left} - ${right}`;
-  }
-
-  if (node.typename === "Mul") {
-    const left = extractComplexExpression(node.left);
-    const right = extractComplexExpression(node.right);
-    return `${left} * ${right}`;
-  }
-
-  if (node.typename === "Div") {
-    const left = extractComplexExpression(node.left);
-    const right = extractComplexExpression(node.right);
-    return `${left} / ${right}`;
-  }
-
-  if (node.typename === "Symbol") {
-    return node.value;
-  }
-
-  if (node.typename === "Literal") {
-    return typeof node.value === "string"
-      ? `"${node.value}"`
-      : String(node.value);
-  }
-
-  if (node.typename === "LookupVal" && node.target && node.val) {
-    return `${node.target.value}.${node.val.value}`;
-  }
-
-  // Fallback
-  if (node.value !== undefined) {
-    return String(node.value);
-  }
-
-  return "unknown";
+  return { trimLeft, trimRight };
 }
 
 /**

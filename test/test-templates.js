@@ -114,15 +114,13 @@ export const testTemplates = {
   break: {
     liquid:
       "{% for item in items %}{% if item.skip %}{% break %}{% endif %}{{ item }}{% endfor %}",
-    nunjucks:
-      "{% for item in items %}{% if item.skip %}{% break %}{% endif %}{{ item }}{% endfor %}",
+    nunjucks: null, // Nunjucks doesn't support break statements
     // mustache: "{{#items}}{{^skip}}{{ . }}{{/skip}}{{/items}}", // Mustache doesn't have break
   },
   continue: {
     liquid:
       "{% for item in items %}{% if item.skip %}{% continue %}{% endif %}{{ item }}{% endfor %}",
-    nunjucks:
-      "{% for item in items %}{% if item.skip %}{% continue %}{% endif %}{{ item }}{% endfor %}",
+    nunjucks: null, // Nunjucks doesn't support continue statements
     // mustache: "{{#items}}{{^skip}}{{ . }}{{/skip}}{{/items}}", // Mustache doesn't have continue
   },
   tagWhitespaceControl: {
@@ -142,8 +140,10 @@ export const testTemplates = {
     // mustache: "{{ processed_text }}", // Would need preprocessing
   },
   caseStatement: {
-    liquid:
+    liquid: [
       "{% case product.type %}{% when 'shirt' %}Clothing{% when 'book' %}Literature{% else %}Other{% endcase %}",
+      "{% if product.type == 'shirt' %}Clothing{% elsif product.type == 'book' %}Literature{% else %}Other{% endif %}",
+    ],
     nunjucks:
       "{% if product.type == 'shirt' %}Clothing{% elif product.type == 'book' %}Literature{% else %}Other{% endif %}",
     // mustache: "{{#product}}{{#shirt}}Clothing{{/shirt}}{{#book}}Literature{{/book}}{{#other}}Other{{/other}}{{/product}}",
