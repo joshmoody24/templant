@@ -5,18 +5,56 @@ export interface IrTextNode {
 
 export interface IrOutputNode {
   type: "output";
-  filters: string[];
+  filters: {
+    name: string;
+    args?: string[];
+  }[];
   postfix: string[];
+  trimLeft?: boolean;
+  trimRight?: boolean;
 }
 
 export interface IrTagNode {
   type: "tag";
   name: string;
-  attributes: Record<string, string>;
+  args?: string;
   children: IrNode[];
+  trimLeft?: boolean;
+  trimRight?: boolean;
 }
 
-export type IrNode = IrTextNode | IrOutputNode | IrTagNode;
+export interface IrConditionalNode {
+  type: "conditional";
+  variant: "if" | "case" | "unless";
+  branches: {
+    condition: string | null;
+    children: IrNode[];
+  }[];
+  trimLeft?: boolean;
+  trimRight?: boolean;
+}
+
+export interface IrLoopNode {
+  type: "loop";
+  args: string;
+  children: IrNode[];
+  elseChildren?: IrNode[];
+  trimLeft?: boolean;
+  trimRight?: boolean;
+}
+
+export interface IrCommentNode {
+  type: "comment";
+  content: string;
+}
+
+export type IrNode =
+  | IrTextNode
+  | IrOutputNode
+  | IrTagNode
+  | IrConditionalNode
+  | IrLoopNode
+  | IrCommentNode;
 
 export type Parser = (content: string) => IrNode[];
 export type Renderer = (ir: IrNode[]) => string;
